@@ -1,0 +1,22 @@
+AGENTS.md
+CONCEPT.md
+/.claude
+
+# Local test images (personal, not for commit)
+fixtures/images/*
+!fixtures/images/.gitkeep
+
+# Node / build output
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# npm pack output
+*.tgz
+
+# Environment / local
+.env
+.DS_Store
+.npmrc
+*.log
