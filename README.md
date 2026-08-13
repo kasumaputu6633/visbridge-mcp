@@ -1,5 +1,8 @@
 # visbridge-mcp
 
+[![npm version](https://img.shields.io/npm/v/visbridge-mcp)](https://www.npmjs.com/package/visbridge-mcp)
+[![license](https://img.shields.io/npm/l/visbridge-mcp)](https://www.npmjs.com/package/visbridge-mcp)
+
 Token-efficient vision for MCP clients. An [MCP](https://modelcontextprotocol.io) server
 (stdio + Streamable HTTP) exposing a single `analyze_image` tool that lets any MCP client **see**
 images — describe, OCR, or inspect — through an OpenAI-compatible vision provider.
@@ -10,11 +13,11 @@ plus a mode; the server resolves the image, sends it to the vision model, and re
 text.
 
 ```
-┌───────────────────────────┐   JSON-RPC (stdio)   ┌─────────────────┐   HTTP        ┌──────────────────┐
-│  MCP client                │ ───────────────────▶ │  visbridge-mcp   │ ────────────▶ │  vision provider  │
-│  (Claude Code, Cursor,     │                      │  (this server)   │ /chat/completions│  (OpenAI-compat)  │
-│   non-vision model)        │ ◀─────────────────── │                  │ ◀────────────── │  e.g. gemini      │
-└───────────────────────────┘  compact text answer  └─────────────────┘                └──────────────────┘
+┌──────────────────┐    JSON-RPC (stdio)   ┌──────────────────┐     HTTP (chat)     ┌──────────────────┐
+│    MCP client    │ ────────────────────▶ │   visbridge-mcp   │ ──────────────────▶ │  vision provider │
+│   (non-vision    │ ◀──────────────────── │   (this server)   │ ◀────────────────── │  (OpenAI-compat, │
+│     model)       │    compact text       │                   │   /chat/completions │    e.g. gemini)  │
+└──────────────────┘                       └──────────────────┘                     └──────────────────┘
 ```
 
 ## Features
@@ -23,7 +26,7 @@ text.
   for remote / shared / team deployments.
 - **One tool, three modes** — `describe` (summarize), `ocr` (extract text), `inspect` (answer a
   specific question via `prompt`).
-- **`detail: low` by default** — cheaper *and* measurably better OCR than `high` (Phase 0 finding).
+- **`detail: low` by default** — cheaper *and* measurably better OCR than `high`.
 - **Fence-free OCR** — every OCR answer is stripped of markdown code fences defensively.
 - **Four image sources** — local `path`, `url`, `base64` (data URL or raw), and `resource`
   (resolved against a configured directory).
@@ -71,7 +74,7 @@ the environment from its own config — a `.env` file is optional.
 
 ### Install from npm (npx)
 
-Once published, anyone can run it without a local checkout:
+The package is published to npm — anyone can run it without a local checkout:
 
 ```jsonc
 {
@@ -110,7 +113,7 @@ HTTP transport (remote / shared):
 claude mcp add --transport http visbridge http://127.0.0.1:3000/mcp
 ```
 
-> **Local development** (before publishing): point at the launcher instead, so the API key stays in
+> **Local development** (from a checkout): point at the launcher instead, so the API key stays in
 > the repo's `.env` rather than the client config:
 > `claude mcp add visbridge -- /path/to/visbridge-mcp/scripts/visbridge.sh`
 
@@ -185,8 +188,7 @@ The result is a structured object plus a human-readable text block:
 
 ### Run over HTTP (Streamable HTTP)
 
-For remote / shared / team deployments, run the server over Streamable HTTP instead of stdio
-(CONCEPT.md §60):
+For remote / shared / team deployments, run the server over Streamable HTTP instead of stdio:
 
 ```bash
 VISION_TRANSPORT=http VISION_HTTP_PORT=3000 node --import tsx src/index.ts
@@ -204,7 +206,7 @@ claude mcp add --transport http visbridge http://127.0.0.1:3000/mcp
 ```
 
 > Bind `VISION_HTTP_HOST=0.0.0.0` only behind a TLS-terminating gateway — the HTTP transport carries
-> the provider's `VISION_API_KEY` and has no built-in authentication (CONCEPT.md §61).
+> the provider's `VISION_API_KEY` and has no built-in authentication.
 
 ## Discoverability — helping non-vision models find the tool
 
@@ -248,7 +250,7 @@ npm run demo                       # MCP-client demo: listTools + describe + ocr
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # 35 unit + integration tests (integration spawns the server, no network)
+npm test            # 39 unit + integration tests (integration spawns the server, no network)
 npm run build       # compile to dist/  (bin: visbridge-mcp)
 npm run dev         # start the stdio server via tsx
 ```
@@ -264,17 +266,21 @@ npm run dev         # start the stdio server via tsx
 
 ## Publishing to npm
 
+Releases are automated with [npm trusted publishing](https://docs.npmjs.com/generating-provenance-statements)
+(GitHub Actions OIDC — no npm token). To cut a release:
+
 ```bash
-npm login                 # once, with your npm account
-npm publish               # prepublishOnly runs `npm run build` automatically
+npm version patch          # or minor / major — bumps version, commits, and tags
+git push --follow-tags
 ```
 
-The tarball ships only `package.json`, `README.md`, `LICENSE`, and `dist/` — no `src/`, fixtures,
-or `.env`. After publishing, the package runs via `npx -y visbridge-mcp` (see above).
+Pushing the `v*` tag triggers `.github/workflows/publish.yml`, which runs the tests, builds, and
+publishes to npm. The tarball ships only `package.json`, `README.md`, `LICENSE`, and `dist/` — no
+`src/`, fixtures, or `.env`.
 
 ## Roadmap
 
 - `resource` wired to a live MCP resource list.
 - `openai.ts` Responses-API adapter (native OpenAI path, replacing `openai-compatible` where desired).
 - Richer `doctor` output (surfaced per-call cost).
-- HTTP authorization (MCP-standard auth / OAuth) for protected multi-tenant deployments (CONCEPT.md §61).
+- HTTP authorization (MCP-standard auth / OAuth) for protected multi-tenant deployments.
