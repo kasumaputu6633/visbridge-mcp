@@ -1,0 +1,117 @@
+// The `analyze_image` tool handler: resolve -> validate -> analyze -> normalize.
+
+import type { AppConfig } from "../config.js";
+import type { Capabilities } from "../core/capabilities.js";
+import { VisionError } from "../core/errors.js";
+import type {
+  Detail,
+  ImageRef,
+  Mode,
+  ProviderResult,
+  RequestedDetail,
+  RequestedMode,
+  VisionResult,
+} from "../core/types.js";
+import { MediaResolver } from "../media/resolver.js";
+import { createAdapter } from "../providers/registry.js";
+import { fillCostUsd, logCall } from "../observability/usage.js";
+import { stripCodeFences } from "./prompt.js";
+
+export interface AnalyzeImageInput {
+  image: ImageRef;
+  mode?: RequestedMode;
+  prompt?: string;
+  detail?: RequestedDetail;
+}
+
+export class AnalyzeImageTool {
+  private readonly resolver: MediaResolver;
+
+  constructor(private readonly config: AppConfig) {
+    this.resolver = new MediaResolver(config);
+  }
+
+  getCapabilities(): Capabilities {
+    return createAdapter(this.config).getCapabilities();
+  }
+
+  async run(input: AnalyzeImageInput): Promise<VisionResult> {
+    const image = validateImage(input.image);
+    const mode = resolveMode(input.mode ?? "auto", input.prompt);
+    const detail = resolveDetail(input.detail ?? "auto");
+    const outputBudget = budgetFor(mode, this.config);
+
+    const adapter = createAdapter(this.config);
+    const media = await this.resolver.resolve(image);
+
+    const startedAt = performance.now();
+    let providerResult: ProviderResult;
+    try {
+      providerResult = await adapter.analyze({ media, mode, prompt: input.prompt, detail, outputBudget });
+    } catch (error) {
+      throw toVisionError(error);
+    }
+    const latencyMs = Math.round(performance.now() - startedAt);
+
+    const usage = fillCostUsd(providerResult.usage, this.config.model);
+    logCall({
+      model: this.config.model,
+      provider: this.config.provider,
+      mode,
+      detail,
+      latencyMs,
+      usage,
+    });
+
+    return normalize(providerResult, mode);
+  }
+}
+
+function validateImage(image: unknown): ImageRef {
+  if (
+    !image ||
+    typeof image !== "object" ||
+    typeof (image as ImageRef).kind !== "string" ||
+    typeof (image as ImageRef).value !== "string"
+  ) {
+    throw new VisionError("invalid_input", "`image` must be an object with `kind` and `value`");
+  }
+  const { kind, value } = image as ImageRef;
+  if (!["path", "url", "base64", "resource"].includes(kind)) {
+    throw new VisionError("invalid_input", `Unknown image kind: ${kind}`);
+  }
+  return { kind, value };
+}
+
+export function resolveMode(requested: RequestedMode, prompt?: string): Mode {
+  if (requested === "auto") {
+    return prompt && prompt.trim() ? "inspect" : "describe";
+  }
+  return requested;
+}
+
+export function resolveDetail(requested: RequestedDetail): Detail {
+  return requested === "auto" ? "low" : requested;
+}
+
+export function budgetFor(mode: Mode, config: AppConfig): number {
+  if (mode === "ocr") return config.ocrOutputBudget;
+  if (mode === "inspect") return config.inspectOutputBudget;
+  return config.describeOutputBudget;
+}
+
+function normalize(result: ProviderResult, mode: Mode): VisionResult {
+  const raw = mode === "ocr" ? stripCodeFences(result.answer) : result.answer.trim();
+  const output: VisionResult = { answer: raw };
+  if (mode === "ocr") output.text = raw;
+  if (result.truncated) {
+    output.truncated = true;
+    output.warnings = ["Output was truncated at the configured token budget"];
+  }
+  return output;
+}
+
+function toVisionError(error: unknown): VisionError {
+  if (error instanceof VisionError) return error;
+  return new VisionError("internal_error", "Internal error", { cause: error });
+}
