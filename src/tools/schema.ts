@@ -4,7 +4,9 @@
 import * as z from "zod/v4";
 
 export const ANALYZE_IMAGE_DESCRIPTION =
-  "Read or analyze an image you cannot view directly (for example, when you lack native vision). " +
+  "Analyze an image you cannot view directly (for example, when you lack native vision). " +
+  "If a user asks about an image you cannot see, you MUST call this tool and answer from its " +
+  "result — do not say you cannot see the image and do not merely say you will call it. " +
   "Supply the image as a file path, URL, base64, or resource reference, and choose a mode: " +
   "describe (summarize it), ocr (extract its text), or inspect (answer a specific question via prompt).";
 
