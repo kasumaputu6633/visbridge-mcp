@@ -148,9 +148,35 @@ Create `.cursor/mcp.json`:
 For the HTTP transport, replace `command`/`args`/`env` with
 `"url": "http://127.0.0.1:3000/mcp"`.
 
+### Register in Kilo Code
+
+Kilo Code stores MCP servers in `~/.config/kilo/kilo.jsonc` (JSONC), under a top-level `mcp` key.
+Its schema is **not** the standard `mcpServers` shape — `command` is the full argument array (no
+separate `args`) and `enabled` is required:
+
+```jsonc
+{
+  "mcp": {
+    "visbridge": {
+      "type": "local",
+      "command": ["npx", "-y", "visbridge-mcp"],
+      "environment": {
+        "VISION_BASE_URL": "https://...",
+        "VISION_API_KEY": "sk-...",
+        "VISION_MODEL": "ag/gemini-3.6-flash-medium"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+For the HTTP transport, replace `type`/`command`/`environment` with the remote `type` and
+`"url": "http://127.0.0.1:3000/mcp"`.
+
 ### Other clients (Windsurf, VS Code, Cline, …)
 
-They accept the same `mcpServers` shape shown above. Two notes:
+They accept the standard `mcpServers` shape from the Cursor example above. Two notes:
 
 - **HTTP transport** — replace `command`/`args`/`env` with `"url": "https://your-host/mcp"` (plus
   `"headers"` for a bearer token once auth is enabled).
@@ -211,11 +237,12 @@ claude mcp add --transport http visbridge http://127.0.0.1:3000/mcp
 ## Discoverability — helping non-vision models find the tool
 
 The tool's `description` is the only "advertisement" a model sees in its context, so it is written
-to signal when to use it: *"Read or analyze an image you cannot view directly…"*. A capable model
-will usually reach for `analyze_image` on its own when it can't see an image.
+to signal when to use it: *"Analyze an image you cannot view directly…"*. A capable model will
+usually reach for `analyze_image` on its own when it can't see an image.
 
-Weak or small models may not. To make the behavior deterministic, add a reminder to the driving
-agent's instructions:
+Weak or small models may instead **announce** that they will use the tool ("I'll use visbridge to
+look at it") without actually calling it. To make the behavior deterministic, add a reminder to the
+driving agent's instructions:
 
 - **Claude Code, global** → `~/.claude/CLAUDE.md`
 - **Claude Code, per-project** → `CLAUDE.md`
@@ -225,9 +252,11 @@ agent's instructions:
 ```markdown
 ## Image handling
 When asked to look at, read, describe, or extract text from an image and you have no
-native vision, do not claim you cannot see it — call the `visbridge` MCP tool
-`analyze_image` instead. Pass the image by `kind` (`path` / `url` / `base64` /
-`resource`) and choose `mode`: `describe`, `ocr`, or `inspect` (with `prompt`).
+native vision, do not say you cannot see it and do not merely say you will use the
+`visbridge` tool — call `analyze_image` in the same turn and answer from its result.
+Pass the image by `kind` (`path` / `url` / `base64` / `resource`) and choose `mode`:
+`describe`, `ocr`, or `inspect` (with `prompt`). If the image was pasted with no
+path or URL, ask for a path or URL to pass to the tool.
 ```
 
 ## CLI
