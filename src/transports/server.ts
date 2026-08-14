@@ -4,6 +4,7 @@
 // The core bridge is transport-agnostic — the transport adapters only call
 // `server.connect(transport)` with their own transport instance.
 
+import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AppConfig } from "../config.js";
 import { isVisionError, safeErrorMessage } from "../core/errors.js";
@@ -14,9 +15,11 @@ import {
   analyzeImageOutputSchema,
 } from "../tools/schema.js";
 
+const require = createRequire(import.meta.url);
+const { version } = require("../../package.json") as { version: string };
+
 export const SERVER_NAME = "visbridge-mcp";
-// Keep in sync with package.json (no fs read here so the built bundle stays simple).
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION = version;
 
 export function buildServer(config: AppConfig): McpServer {
   const tool = new AnalyzeImageTool(config);

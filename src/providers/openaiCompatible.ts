@@ -3,6 +3,7 @@
 import type { AppConfig } from "../config.js";
 import type { Capabilities } from "../core/capabilities.js";
 import {
+  isVisionError,
   providerErrorFromHttpStatus,
   safeErrorMessage,
   toVisionError,
@@ -55,46 +56,74 @@ export class OpenAICompatibleAdapter {
   }
 
   async analyze(request: ProviderRequest): Promise<ProviderResult> {
-    const { media, mode, prompt, detail, outputBudget } = request;
-    const imageDataUrl = `data:${media.mimeType};base64,${media.bytes.toString("base64")}`;
+    const { media, mode, prompt, context, detail, outputBudget } = request;
+    // Use the original data URL when available (base64/data-URL input) to avoid
+    // a decode→re-encode round-trip. Otherwise build one from the resolved bytes.
+    const imageDataUrl = media.dataUrl ?? `data:${media.mimeType};base64,${media.bytes.toString("base64")}`;
     const endpoint = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
-    let response: Response;
-    try {
-      response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.config.apiKey}`,
-          accept: "application/json",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: this.config.model,
-          max_tokens: outputBudget,
-          stream: false,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: buildPrompt(mode, prompt) },
-                { type: "image_url", image_url: { url: imageDataUrl, detail } },
-              ],
-            },
+    const body = JSON.stringify({
+      model: this.config.model,
+      max_tokens: outputBudget,
+      stream: false,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: buildPrompt(mode, prompt, context) },
+            { type: "image_url", image_url: { url: imageDataUrl, detail } },
           ],
-        }),
-        signal: AbortSignal.timeout(this.config.timeoutMs),
-      });
-    } catch (error) {
-      throw toVisionError(error, "invalid_provider_response");
+        },
+      ],
+    });
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${this.config.apiKey}`,
+            accept: "application/json",
+            "content-type": "application/json",
+          },
+          body,
+          signal: AbortSignal.timeout(this.config.timeoutMs),
+        });
+
+        if (response.ok) {
+          return this.parseResponse(await response.text());
+        }
+
+        // Transient failures — retryable unless it's the last attempt.
+        const visionError = providerErrorFromHttpStatus(response.status);
+        if (!isRetryable(visionError.code) || attempt === this.config.maxRetries) {
+          throw visionError;
+        }
+
+        // Respect retry-after header; exponential backoff as floor.
+        const retryAfter = parseRetryAfter(response.headers.get("retry-after"));
+        const delay = Math.max(retryAfter ?? 0, backoffMs(attempt));
+        await sleep(delay);
+        lastError = visionError;
+      } catch (error) {
+        // Network/timeout errors are retryable; domain errors are not.
+        if (attempt === this.config.maxRetries || !isRetryableFetchError(error)) {
+          throw toVisionError(error, "invalid_provider_response");
+        }
+        await sleep(backoffMs(attempt));
+        lastError = error;
+      }
     }
 
-    if (!response.ok) {
-      throw providerErrorFromHttpStatus(response.status);
-    }
+    // Unreachable — the loop always throws on final attempt.
+    throw toVisionError(lastError, "invalid_provider_response");
+  }
 
+  private async parseResponse(bodyText: string): Promise<ProviderResult> {
     let parsed: ParsedCompletion;
     try {
-      parsed = parseCompletionBody(await response.text());
+      parsed = parseCompletionBody(bodyText);
     } catch (error) {
       throw new VisionError("invalid_provider_response", safeErrorMessage(error), { cause: error });
     }
@@ -112,6 +141,42 @@ export class OpenAICompatibleAdapter {
       truncated: parsed.truncated,
     };
   }
+}
+
+// Rate limits and upstream 5xx (mapped to internal_error) are worth retrying.
+function isRetryable(code: string): boolean {
+  return code === "provider_rate_limit" || code === "internal_error";
+}
+
+// A parse failure is a domain error and must not be retried; fetch/abort
+// (network drop, DNS, timeout) can be transient.
+function isRetryableFetchError(error: unknown): boolean {
+  return !isVisionError(error);
+}
+
+function backoffMs(attempt: number): number {
+  // 500ms, 1s, 2s, ... capped at 8s.
+  return Math.min(500 * 2 ** attempt, 8_000);
+}
+
+function parseRetryAfter(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const trimmed = header.trim();
+
+  // Numeric form: delay in seconds.
+  const seconds = Number(trimmed);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+
+  // HTTP-date form: milliseconds until that instant.
+  const when = Date.parse(trimmed);
+  if (!Number.isNaN(when)) return Math.max(0, when - Date.now());
+
+  return undefined;
+}
+
+function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function parseCompletionBody(responseBody: string): ParsedCompletion {

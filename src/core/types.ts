@@ -17,6 +17,10 @@ export interface ImageRef {
 export interface ResolvedMedia {
   bytes: Buffer;
   mimeType: string;
+  // When the image was supplied as a base64/data-URL string, the exact payload
+  // the client already sent. Provider adapters use this directly instead of
+  // re-encoding `bytes` — no decode→re-encode round-trip for large images.
+  dataUrl?: string;
 }
 
 export interface TokenUsage {
@@ -31,6 +35,7 @@ export interface ProviderRequest {
   media: ResolvedMedia;
   mode: Mode;
   prompt?: string;
+  context?: string;
   detail: Detail;
   outputBudget: number;
 }

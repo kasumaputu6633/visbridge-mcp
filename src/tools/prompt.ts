@@ -2,20 +2,28 @@
 
 import type { Mode } from "../core/types.js";
 
-export function buildPrompt(mode: Mode, userPrompt?: string): string {
+export function buildPrompt(mode: Mode, userPrompt?: string, context?: string): string {
+  const contextBlock = context
+    ? `\nContext from the user's request: ${context}`
+    : "";
+
   if (mode === "ocr") {
     const base =
       "Extract the requested visible text exactly.\n" +
       "Do not infer missing text.\n" +
       "Return plain text only — no markdown, no code fences.";
-    return userPrompt ? `${base}\n${userPrompt}` : base;
+    const suffix = userPrompt ? `\n${userPrompt}` : "";
+    return `${base}${suffix}${contextBlock}`;
   }
 
   if (mode === "inspect") {
-    return `Answer this visual question directly:\n${userPrompt ?? ""}\nOnly use information visible in the image.`;
+    return `Answer this visual question directly:\n${userPrompt ?? ""}\nOnly use information visible in the image.${contextBlock}`;
   }
 
-  return "Briefly describe the important visible content.";
+  // describe: include context so the summary is relevant to what the user wants.
+  const base = "Briefly describe the important visible content.";
+  const suffix = userPrompt ? `\nFocus on: ${userPrompt}` : "";
+  return `${base}${suffix}${contextBlock}`;
 }
 
 // Defensively strip markdown code fences (a Phase 0 finding: OCR output was

@@ -66,6 +66,7 @@ the environment from its own config — a `.env` file is optional.
 | `VISION_INSPECT_OUTPUT_BUDGET` | — | `384` | Max output tokens for `inspect`. |
 | `VISION_OCR_OUTPUT_BUDGET` | — | `1024` | Max output tokens for `ocr`. |
 | `VISION_TIMEOUT_MS` | — | `60000` | Provider request timeout (ms). |
+| `VISION_MAX_RETRIES` | — | `2` | Retries for transient errors (429 / 5xx / network); honours `retry-after`. `0` disables. |
 | `VISION_MAX_IMAGE_BYTES` | — | `20971520` | Max decoded image size (20 MB). |
 | `VISION_SSRF_ALLOW_HOSTS` | — | *(none)* | Comma-separated hostnames allowed to reach private networks. |
 | `VISION_RESOURCE_DIR` | — | *(none)* | Base dir for resolving `resource` image references. |
@@ -193,13 +194,20 @@ The three `VISION_*` variables are the only required config; everything else has
 {
   "image": { "kind": "path", "value": "fixtures/images/dense-ui.png" }, // path | url | base64 | resource
   "mode": "auto",          // auto | describe | ocr | inspect
-  "prompt": "…",           // optional; for inspect
+  "prompt": "…",           // optional; for inspect mode
+  "context": "…",          // optional; the user's original request so the vision model understands intent
   "detail": "auto"         // auto | low | high
 }
 ```
 
 Mode resolution: `auto` → `describe` when `prompt` is empty, otherwise `inspect`. Detail resolution:
-`auto` → `low`.
+`auto` → `low`.  
+
+**`context`** — when set, the user's original question or intent is injected into the vision model's
+prompt alongside the mode-specific instruction. This lets the vision model focus on what the user
+actually asked about (e.g. *"analyze the layout"*, *"find the error code"*) even when the driving
+model only describes the mode generically. Always pass the full user request as `context` when the
+driving model's own instructions risk stripping the intent.
 
 The result is a structured object plus a human-readable text block:
 

@@ -28,3 +28,19 @@ test("buildPrompt inspect embeds the question", () => {
   const prompt = buildPrompt("inspect", "What color is it?");
   assert.match(prompt, /What color is it\?/);
 });
+
+test("buildPrompt describe includes user context when provided", () => {
+  const prompt = buildPrompt("describe", undefined, "analyze the layout of this design");
+  assert.match(prompt, /analyze the layout of this design/);
+});
+
+test("buildPrompt omits the context block when no context is given", () => {
+  const prompt = buildPrompt("describe");
+  assert.doesNotMatch(prompt, /Context from the user's request/);
+});
+
+test("buildPrompt ocr appends context after the plain-text instruction", () => {
+  const prompt = buildPrompt("ocr", undefined, "read the error code");
+  assert.match(prompt, /plain text only/);
+  assert.match(prompt, /read the error code/);
+});

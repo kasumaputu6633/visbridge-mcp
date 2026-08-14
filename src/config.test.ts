@@ -13,6 +13,7 @@ test("loadConfig defaults to stdio transport", () => {
   assert.equal(config.transport, "stdio");
   assert.equal(config.httpHost, "127.0.0.1");
   assert.equal(config.httpPort, 3000);
+  assert.equal(config.maxRetries, 2);
 });
 
 test("loadConfig parses http transport, host, and port", () => {
@@ -25,6 +26,15 @@ test("loadConfig parses http transport, host, and port", () => {
   assert.equal(config.transport, "http");
   assert.equal(config.httpHost, "0.0.0.0");
   assert.equal(config.httpPort, 8080);
+});
+
+test("loadConfig parses maxRetries and rejects negatives", () => {
+  assert.equal(loadConfig({ ...BASE_ENV, VISION_MAX_RETRIES: "5" }).maxRetries, 5);
+  assert.equal(loadConfig({ ...BASE_ENV, VISION_MAX_RETRIES: "0" }).maxRetries, 0);
+  assert.throws(
+    () => loadConfig({ ...BASE_ENV, VISION_MAX_RETRIES: "-1" }),
+    /Expected a non-negative integer/,
+  );
 });
 
 test("loadConfig rejects an unknown transport", () => {

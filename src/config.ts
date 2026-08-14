@@ -9,6 +9,7 @@ export interface AppConfig {
   apiKey: string;
   model: string;
   provider: ProviderId;
+  maxRetries: number;
   describeOutputBudget: number;
   inspectOutputBudget: number;
   ocrOutputBudget: number;
@@ -26,6 +27,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const apiKey = requiredEnv(env, "VISION_API_KEY");
   const model = requiredEnv(env, "VISION_MODEL");
   const provider = readProvider(env.VISION_PROVIDER);
+  const maxRetries = readNonNegativeInt(env.VISION_MAX_RETRIES, 2);
   const describeOutputBudget = readPositiveInt(env.VISION_DESCRIBE_OUTPUT_BUDGET, 256);
   const inspectOutputBudget = readPositiveInt(env.VISION_INSPECT_OUTPUT_BUDGET, 384);
   const ocrOutputBudget = readPositiveInt(env.VISION_OCR_OUTPUT_BUDGET, 1024);
@@ -42,6 +44,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     apiKey,
     model,
     provider,
+    maxRetries,
     describeOutputBudget,
     inspectOutputBudget,
     ocrOutputBudget,
@@ -78,12 +81,20 @@ function readList(value: string | undefined): string[] {
 }
 
 function readPositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = readNonNegativeInt(value, fallback);
+  if (parsed <= 0) {
+    throw new Error(`Expected a positive integer, got "${String(value?.trim())}"`);
+  }
+  return parsed;
+}
+
+function readNonNegativeInt(value: string | undefined, fallback: number): number {
   const trimmed = value?.trim();
   if (!trimmed) return fallback;
 
   const parsed = Number(trimmed);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    throw new Error(`Expected a positive integer, got "${trimmed}"`);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`Expected a non-negative integer, got "${trimmed}"`);
   }
   return parsed;
 }

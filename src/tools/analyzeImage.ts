@@ -13,6 +13,7 @@ import type {
   VisionResult,
 } from "../core/types.js";
 import { MediaResolver } from "../media/resolver.js";
+import type { VisionProviderAdapter } from "../core/capabilities.js";
 import { createAdapter } from "../providers/registry.js";
 import { fillCostUsd, logCall } from "../observability/usage.js";
 import { stripCodeFences } from "./prompt.js";
@@ -21,18 +22,21 @@ export interface AnalyzeImageInput {
   image: ImageRef;
   mode?: RequestedMode;
   prompt?: string;
+  context?: string;
   detail?: RequestedDetail;
 }
 
 export class AnalyzeImageTool {
   private readonly resolver: MediaResolver;
+  private readonly adapter: VisionProviderAdapter;
 
   constructor(private readonly config: AppConfig) {
     this.resolver = new MediaResolver(config);
+    this.adapter = createAdapter(config);
   }
 
   getCapabilities(): Capabilities {
-    return createAdapter(this.config).getCapabilities();
+    return this.adapter.getCapabilities();
   }
 
   async run(input: AnalyzeImageInput): Promise<VisionResult> {
@@ -41,13 +45,20 @@ export class AnalyzeImageTool {
     const detail = resolveDetail(input.detail ?? "auto");
     const outputBudget = budgetFor(mode, this.config);
 
-    const adapter = createAdapter(this.config);
+    const adapter = this.adapter;
     const media = await this.resolver.resolve(image);
 
     const startedAt = performance.now();
     let providerResult: ProviderResult;
     try {
-      providerResult = await adapter.analyze({ media, mode, prompt: input.prompt, detail, outputBudget });
+      providerResult = await adapter.analyze({
+        media,
+        mode,
+        prompt: input.prompt,
+        context: input.context,
+        detail,
+        outputBudget,
+      });
     } catch (error) {
       throw toVisionError(error);
     }

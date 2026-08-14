@@ -51,11 +51,17 @@ export class MediaResolver {
   private resolveBase64(value: string): ResolvedMedia {
     let encoded = value.trim();
     let hintMimeType: string | undefined;
+    let dataUrl: string | undefined;
 
-    const dataUrl = encoded.match(/^data:(image\/[a-z0-9.+-]+);base64,(.*)$/is);
-    if (dataUrl) {
-      hintMimeType = dataUrl[1].toLowerCase();
-      encoded = dataUrl[2];
+    const dataUrlMatch = encoded.match(/^data:(image\/[a-z0-9.+-]+);base64,(.*)$/is);
+    if (dataUrlMatch) {
+      hintMimeType = dataUrlMatch[1].toLowerCase();
+      encoded = dataUrlMatch[2];
+      // Preserve the original data URL so provider adapters can use it
+      // directly instead of re-encoding the decoded bytes.
+      if (hintMimeType) {
+        dataUrl = `data:${hintMimeType};base64,${encoded}`;
+      }
     }
 
     // Pre-check before decoding: a base64 string of N bytes is ~ceil(N/3)*4 chars.
@@ -78,7 +84,7 @@ export class MediaResolver {
       throw new VisionError("invalid_input", "Image base64 decoded to no data");
     }
 
-    return this.finish(bytes, hintMimeType);
+    return this.finish(bytes, hintMimeType, dataUrl);
   }
 
   private async resolveUrl(value: string): Promise<ResolvedMedia> {
@@ -155,10 +161,10 @@ export class MediaResolver {
     return this.resolvePath(target);
   }
 
-  private finish(bytes: Buffer, hintMimeType?: string): ResolvedMedia {
+  private finish(bytes: Buffer, hintMimeType?: string, dataUrl?: string): ResolvedMedia {
     assertImageSize(bytes, this.config.maxImageBytes);
     const mimeType = assertSupportedImage(bytes, hintMimeType);
-    return { bytes, mimeType };
+    return { bytes, mimeType, dataUrl };
   }
 }
 
