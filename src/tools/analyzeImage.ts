@@ -60,7 +60,17 @@ export class AnalyzeImageTool {
         outputBudget,
       });
     } catch (error) {
-      throw toVisionError(error);
+      const visionError = toVisionError(error);
+      logCall({
+        model: this.config.model,
+        provider: this.config.provider,
+        mode,
+        detail,
+        latencyMs: Math.round(performance.now() - startedAt),
+        usage: emptyUsage(),
+        errorCode: visionError.code,
+      });
+      throw visionError;
     }
     const latencyMs = Math.round(performance.now() - startedAt);
 
@@ -74,7 +84,7 @@ export class AnalyzeImageTool {
       usage,
     });
 
-    return normalize(providerResult, mode);
+    return normalize(providerResult, mode, media.warnings);
   }
 }
 
@@ -111,18 +121,35 @@ export function budgetFor(mode: Mode, config: AppConfig): number {
   return config.describeOutputBudget;
 }
 
-function normalize(result: ProviderResult, mode: Mode): VisionResult {
+function normalize(
+  result: ProviderResult,
+  mode: Mode,
+  mediaWarnings?: string[],
+): VisionResult {
   const raw = mode === "ocr" ? stripCodeFences(result.answer) : result.answer.trim();
   const output: VisionResult = { answer: raw };
   if (mode === "ocr") output.text = raw;
+
+  const warnings = [...(mediaWarnings ?? [])];
   if (result.truncated) {
     output.truncated = true;
-    output.warnings = ["Output was truncated at the configured token budget"];
+    warnings.push("Output was truncated at the configured token budget");
   }
+  if (warnings.length > 0) output.warnings = warnings;
+
   return output;
 }
 
 function toVisionError(error: unknown): VisionError {
   if (error instanceof VisionError) return error;
   return new VisionError("internal_error", "Internal error", { cause: error });
+}
+
+function emptyUsage() {
+  return {
+    promptTokens: "unavailable" as const,
+    completionTokens: "unavailable" as const,
+    totalTokens: "unavailable" as const,
+    estimatedCostUsd: "unavailable" as const,
+  };
 }

@@ -23,7 +23,8 @@ text.
 ## Features
 
 - **Two transports** — stdio for local clients (Claude Code, Cursor), Streamable HTTP (`POST /mcp`)
-  for remote / shared / team deployments.
+  for local clients that connect over HTTP. Both run on the user's own machine — this server is
+  not designed for remote/public hosting.
 - **One tool, three modes** — `describe` (summarize), `ocr` (extract text), `inspect` (answer a
   specific question via `prompt`).
 - **`detail: low` by default** — cheaper *and* measurably better OCR than `high`.
@@ -32,7 +33,10 @@ text.
   (resolved against a configured directory).
 - **Hardened** — SSRF protection (private/loopback/link-local IPs blocked), DNS resolved before
   fetch, MIME sniffing (PNG/JPEG/WebP/GIF) + size limits, at most one redirect.
-- **Structured errors** — 11-code taxonomy, MCP-safe messages (no keys/URLs leak).
+- **Local preprocessing** — oversized images are downscaled before the provider call
+  (`VISION_MAX_DIMENSION`, default 2048, never upscales; animated GIFs use the first frame).
+  Cheaper, faster, and immune to provider-side image limits. A `warnings` entry notes every resize.
+- **Structured errors** — 10-code taxonomy, MCP-safe messages (no keys/URLs leak).
 - **Observability** — token/cost estimation and one JSON log line per call, written to **stderr**
   (never stdout, which is reserved for the JSON-RPC channel).
 
@@ -58,7 +62,7 @@ the environment from its own config — a `.env` file is optional.
 | `VISION_BASE_URL` | ✅ | — | Base URL of the OpenAI-compatible endpoint (http/https). |
 | `VISION_API_KEY` | ✅ | — | Bearer token sent to the provider. |
 | `VISION_MODEL` | ✅ | — | Vision model id, e.g. `ag/gemini-3.6-flash-medium`. |
-| `VISION_PROVIDER` | — | `openai-compatible` | Adapter: `openai-compatible` (chat completions) or `openai` (Responses API — scaffold only). |
+| `VISION_PROVIDER` | — | `openai-compatible` | Adapter: `openai-compatible` (chat completions), `mock` (offline deterministic adapter for tests/demos), or `openai` (Responses API — scaffold only). |
 | `VISION_TRANSPORT` | — | `stdio` | Transport: `stdio` (default) or `http` (Streamable HTTP). |
 | `VISION_HTTP_HOST` | — | `127.0.0.1` | Bind address for the HTTP transport. |
 | `VISION_HTTP_PORT` | — | `3000` | Port for the HTTP transport. |
@@ -68,6 +72,8 @@ the environment from its own config — a `.env` file is optional.
 | `VISION_TIMEOUT_MS` | — | `60000` | Provider request timeout (ms). |
 | `VISION_MAX_RETRIES` | — | `2` | Retries for transient errors (429 / 5xx / network); honours `retry-after`. `0` disables. |
 | `VISION_MAX_IMAGE_BYTES` | — | `20971520` | Max decoded image size (20 MB). |
+| `VISION_MAX_DIMENSION` | — | `2048` | Downscale locally so the longest edge fits (never upscales; `0` disables). |
+| `VISION_MAX_REDIRECTS` | — | `3` | Max redirects for `url` images; every hop is SSRF-revalidated. |
 | `VISION_SSRF_ALLOW_HOSTS` | — | *(none)* | Comma-separated hostnames allowed to reach private networks. |
 | `VISION_RESOURCE_DIR` | — | *(none)* | Base dir for resolving `resource` image references. |
 
@@ -108,7 +114,7 @@ claude mcp add visbridge \
   -- npx -y visbridge-mcp
 ```
 
-HTTP transport (remote / shared):
+HTTP transport (local clients that connect over HTTP):
 
 ```bash
 claude mcp add --transport http visbridge http://127.0.0.1:3000/mcp
@@ -172,15 +178,15 @@ separate `args`) and `enabled` is required:
 }
 ```
 
-For the HTTP transport, replace `type`/`command`/`environment` with the remote `type` and
-`"url": "http://127.0.0.1:3000/mcp"`.
+For the HTTP transport, replace `type`/`command`/`environment` with `"type": "http"` and
+`"url": "http://127.0.0.1:3000/mcp"` — pointing at a server running on the same machine.
 
 ### Other clients (Windsurf, VS Code, Cline, …)
 
 They accept the standard `mcpServers` shape from the Cursor example above. Two notes:
 
-- **HTTP transport** — replace `command`/`args`/`env` with `"url": "https://your-host/mcp"` (plus
-  `"headers"` for a bearer token once auth is enabled).
+- **HTTP transport** — replace `command`/`args`/`env` with `"url": "http://127.0.0.1:3000/mcp"`
+  (a server running on the same machine).
 - **Windows** — wrap the stdio command: `"command": "cmd", "args": ["/c", "npx", "-y",
   "visbridge-mcp"]`.
 
@@ -222,7 +228,8 @@ The result is a structured object plus a human-readable text block:
 
 ### Run over HTTP (Streamable HTTP)
 
-For remote / shared / team deployments, run the server over Streamable HTTP instead of stdio:
+Some local clients and web UIs prefer to connect over HTTP instead of stdio. Run the server over
+Streamable HTTP on the same machine:
 
 ```bash
 VISION_TRANSPORT=http VISION_HTTP_PORT=3000 node --import tsx src/index.ts
@@ -233,14 +240,17 @@ The server listens on `VISION_HTTP_HOST:VISION_HTTP_PORT` (default `127.0.0.1:30
 - `POST /mcp` — the MCP endpoint (stateless, JSON responses).
 - `GET /health` — liveness probe.
 
-Register it in a client that supports remote MCP servers:
+Register it in a client that supports HTTP MCP servers:
 
 ```bash
 claude mcp add --transport http visbridge http://127.0.0.1:3000/mcp
 ```
 
-> Bind `VISION_HTTP_HOST=0.0.0.0` only behind a TLS-terminating gateway — the HTTP transport carries
-> the provider's `VISION_API_KEY` and has no built-in authentication.
+> **Local-only by design.** This server is meant to run on the user's own machine and has no
+> built-in authentication. Do not bind `VISION_HTTP_HOST=0.0.0.0` or expose the port beyond
+> localhost — the HTTP transport carries the provider's `VISION_API_KEY`, accepts arbitrary
+> local `path` image references, and would let anyone who can reach the port use your provider
+> account. If you ever need remote access, front it with an authenticated TLS gateway.
 
 ## Discoverability — helping non-vision models find the tool
 
@@ -287,16 +297,24 @@ npm run demo                       # MCP-client demo: listTools + describe + ocr
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # 39 unit + integration tests (integration spawns the server, no network)
+npm test            # 93 unit + integration tests (mock provider + local HTTP fakes; no network)
 npm run build       # compile to dist/  (bin: visbridge-mcp)
 npm run dev         # start the stdio server via tsx
 ```
 
+Try the full pipeline with no credentials at all:
+
+```bash
+VISION_PROVIDER=mock npx tsx src/index.ts doctor   # offline smoke test of the pipeline
+```
+
 ## Security
 
-- **SSRF**: URL images resolve DNS first and reject private, loopback, link-local, and unspecified
-  addresses (IPv4 + IPv6), with a one-hop redirect re-validation. Override per-host via
-  `VISION_SSRF_ALLOW_HOSTS`.
+- **SSRF**: URL images resolve DNS first, validate every address, block private, loopback,
+  link-local, and unspecified ranges (IPv4 + IPv6), and pin the connection to the validated
+  addresses (defeats DNS rebinding). Redirects are bounded (`VISION_MAX_REDIRECTS`) and each hop
+  is re-validated. Downloads are streamed with a hard byte cap — a lying `content-length` cannot
+  buffer an unbounded response. Override per-host via `VISION_SSRF_ALLOW_HOSTS`.
 - **No secret leakage**: API keys are masked in `config` output and never appear in logs or error
   messages. The launcher script keeps the key out of client config files.
 - **Stdout is the protocol channel** — all logging goes to stderr.
@@ -320,4 +338,6 @@ publishes to npm. The tarball ships only `package.json`, `README.md`, `LICENSE`,
 - `resource` wired to a live MCP resource list.
 - `openai.ts` Responses-API adapter (native OpenAI path, replacing `openai-compatible` where desired).
 - Richer `doctor` output (surfaced per-call cost).
-- HTTP authorization (MCP-standard auth / OAuth) for protected multi-tenant deployments.
+
+This project is **local-only** — there are no plans for remote/multi-tenant hosting, so HTTP
+authorization is explicitly out of scope.

@@ -1,7 +1,7 @@
 // Configuration loaded from the environment (CONCEPT.md §62-66).
 // The MCP client populates process.env from its own config; a `.env` file is optional.
 
-export type ProviderId = "openai" | "openai-compatible";
+export type ProviderId = "openai" | "openai-compatible" | "mock";
 export type TransportId = "stdio" | "http";
 
 export interface AppConfig {
@@ -15,6 +15,8 @@ export interface AppConfig {
   ocrOutputBudget: number;
   timeoutMs: number;
   maxImageBytes: number;
+  maxRedirects: number;
+  maxDimension: number;
   ssrfAllowHosts: string[];
   resourceDir?: string;
   transport: TransportId;
@@ -23,16 +25,21 @@ export interface AppConfig {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  const baseUrl = validateBaseUrl(requiredEnv(env, "VISION_BASE_URL"));
-  const apiKey = requiredEnv(env, "VISION_API_KEY");
-  const model = requiredEnv(env, "VISION_MODEL");
   const provider = readProvider(env.VISION_PROVIDER);
+  const credentialsOptional = provider === "mock";
+  const baseUrl = validateBaseUrl(
+    requiredEnv(env, "VISION_BASE_URL", credentialsOptional ? "http://localhost/v1" : undefined),
+  );
+  const apiKey = requiredEnv(env, "VISION_API_KEY", credentialsOptional ? "mock-key" : undefined);
+  const model = requiredEnv(env, "VISION_MODEL", credentialsOptional ? "mock-model" : undefined);
   const maxRetries = readNonNegativeInt(env.VISION_MAX_RETRIES, 2);
   const describeOutputBudget = readPositiveInt(env.VISION_DESCRIBE_OUTPUT_BUDGET, 256);
   const inspectOutputBudget = readPositiveInt(env.VISION_INSPECT_OUTPUT_BUDGET, 384);
   const ocrOutputBudget = readPositiveInt(env.VISION_OCR_OUTPUT_BUDGET, 1024);
   const timeoutMs = readPositiveInt(env.VISION_TIMEOUT_MS, 60_000);
   const maxImageBytes = readPositiveInt(env.VISION_MAX_IMAGE_BYTES, 20 * 1024 * 1024);
+  const maxRedirects = readNonNegativeInt(env.VISION_MAX_REDIRECTS, 3);
+  const maxDimension = readNonNegativeInt(env.VISION_MAX_DIMENSION, 2048);
   const ssrfAllowHosts = readList(env.VISION_SSRF_ALLOW_HOSTS);
   const resourceDir = readOptional(env.VISION_RESOURCE_DIR);
   const transport = readTransport(env.VISION_TRANSPORT);
@@ -50,6 +57,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ocrOutputBudget,
     timeoutMs,
     maxImageBytes,
+    maxRedirects,
+    maxDimension,
     ssrfAllowHosts,
     resourceDir,
     transport,
@@ -58,12 +67,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   };
 }
 
-function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
+function requiredEnv(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback?: string,
+): string {
   const value = env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required; set it in your MCP client config or copy .env.example to .env`);
-  }
-  return value;
+  if (value) return value;
+  if (fallback !== undefined) return fallback;
+  throw new Error(`${name} is required; set it in your MCP client config or copy .env.example to .env`);
 }
 
 function readOptional(value: string | undefined): string | undefined {
@@ -101,9 +113,15 @@ function readNonNegativeInt(value: string | undefined, fallback: number): number
 
 function readProvider(value: string | undefined): ProviderId {
   const trimmed = value?.trim() || "openai-compatible";
-  if (trimmed !== "openai" && trimmed !== "openai-compatible") {
+  if (trimmed === "openai") {
     throw new Error(
-      `VISION_PROVIDER must be "openai" or "openai-compatible", got "${trimmed}"`,
+      'VISION_PROVIDER=openai is a scaffold only (Responses API adapter not yet implemented). ' +
+      'Use VISION_PROVIDER=openai-compatible for chat-completions-based providers.',
+    );
+  }
+  if (trimmed !== "openai-compatible" && trimmed !== "mock") {
+    throw new Error(
+      `VISION_PROVIDER must be "openai-compatible" or "mock", got "${trimmed}"`,
     );
   }
   return trimmed;

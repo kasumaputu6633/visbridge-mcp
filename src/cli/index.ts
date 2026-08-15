@@ -68,6 +68,7 @@ function runConfig(): void {
       `  ocr budget        = ${config.ocrOutputBudget} tokens`,
       `  timeout           = ${config.timeoutMs} ms`,
       `  max image bytes   = ${config.maxImageBytes}`,
+      `  max redirects     = ${config.maxRedirects}`,
       `  ssrf allow hosts  = ${config.ssrfAllowHosts.join(", ") || "(none)"}`,
       `  resource dir      = ${config.resourceDir ?? "(not set)"}`,
       `  transport         = ${config.transport}`,

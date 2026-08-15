@@ -10,7 +10,6 @@ export type ErrorCode =
   | "provider_timeout"
   | "unsupported_capability"
   | "invalid_provider_response"
-  | "budget_exceeded"
   | "internal_error";
 
 export class VisionError extends Error {

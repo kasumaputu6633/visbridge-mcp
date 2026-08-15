@@ -2,10 +2,12 @@
 
 import type { AppConfig } from "../config.js";
 import type { VisionProviderAdapter } from "../core/capabilities.js";
+import { MockAdapter } from "./mock.js";
 import { OpenAIAdapter } from "./openai.js";
 import { OpenAICompatibleAdapter } from "./openaiCompatible.js";
 
 export function createAdapter(config: AppConfig): VisionProviderAdapter {
   if (config.provider === "openai") return new OpenAIAdapter(config);
+  if (config.provider === "mock") return new MockAdapter(config);
   return new OpenAICompatibleAdapter(config);
 }

@@ -20,7 +20,11 @@ export interface ResolvedMedia {
   // When the image was supplied as a base64/data-URL string, the exact payload
   // the client already sent. Provider adapters use this directly instead of
   // re-encoding `bytes` — no decode→re-encode round-trip for large images.
+  // Invalidated when preprocessing changes the bytes.
   dataUrl?: string;
+  // Warnings from preprocessing (e.g. a local resize) to surface in the
+  // tool result.
+  warnings?: string[];
 }
 
 export interface TokenUsage {

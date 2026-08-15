@@ -37,9 +37,25 @@ test("loadConfig parses maxRetries and rejects negatives", () => {
   );
 });
 
+test("loadConfig parses maxRedirects with default 3", () => {
+  assert.equal(loadConfig({ ...BASE_ENV }).maxRedirects, 3);
+  assert.equal(loadConfig({ ...BASE_ENV, VISION_MAX_REDIRECTS: "0" }).maxRedirects, 0);
+  assert.throws(
+    () => loadConfig({ ...BASE_ENV, VISION_MAX_REDIRECTS: "-2" }),
+    /Expected a non-negative integer/,
+  );
+});
+
 test("loadConfig rejects an unknown transport", () => {
   assert.throws(
     () => loadConfig({ ...BASE_ENV, VISION_TRANSPORT: "ws" }),
     /VISION_TRANSPORT/,
+  );
+});
+
+test("loadConfig rejects openai provider with clear error", () => {
+  assert.throws(
+    () => loadConfig({ ...BASE_ENV, VISION_PROVIDER: "openai" }),
+    /scaffold only|not yet implemented/,
   );
 });
