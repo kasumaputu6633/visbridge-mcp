@@ -3,6 +3,11 @@
 [![npm version](https://img.shields.io/npm/v/visbridge-mcp)](https://www.npmjs.com/package/visbridge-mcp)
 [![license](https://img.shields.io/npm/l/visbridge-mcp)](https://www.npmjs.com/package/visbridge-mcp)
 
+> **Status: stable beta.** The core pipeline (media resolution, SSRF hardening, provider
+> adapters, local preprocessing) is covered by automated tests and releases are automated,
+> but real-world mileage is still limited. For local / personal use it is production-grade;
+> for critical workflows, pin your version and smoke-test with `visbridge-mcp doctor` first.
+
 Token-efficient vision for MCP clients. An [MCP](https://modelcontextprotocol.io) server
 (stdio + Streamable HTTP) exposing a single `analyze_image` tool that lets any MCP client **see**
 images — describe, OCR, or inspect — through an OpenAI-compatible vision provider.
