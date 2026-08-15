@@ -9,7 +9,11 @@ export const ANALYZE_IMAGE_DESCRIPTION =
   "involves an image (file path, URL, base64, or attachment), including design review, " +
   "'make this prettier', comparing screenshots, or 'what does this say'. Never say you " +
   "cannot see images; call this tool and answer from its result. " +
-  "Supply the image as a file path, URL, base64, or resource reference, and choose a mode: " +
+  "Image references: a real filesystem path -> kind:path; an http(s) link -> kind:url; " +
+  "a pasted/attached image part (e.g. clipboard-*.png with a data:image/...;base64 URL) -> " +
+  "kind:base64 with that data URL as the value (do NOT invent disk paths for attachment " +
+  "filenames); a configured resource name -> kind:resource. " +
+  "Choose a mode: " +
   "describe (summarize it), ocr (extract its text), or inspect (answer a specific question via prompt). " +
   "Set `context` to the user's actual request or intent (e.g. the original question about the image) " +
   "so the vision model focuses on what the user cares about — put the full user request in `context` " +

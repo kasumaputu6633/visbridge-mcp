@@ -201,7 +201,9 @@ export class MediaResolver {
     if (!baseDir) {
       throw new VisionError(
         "invalid_input",
-        "resource:// images require VISION_RESOURCE_DIR to be configured",
+        "resource:// images require VISION_RESOURCE_DIR to be configured — " +
+          "if the image came from a pasted/attached message part, pass its data URL as " +
+          "kind:base64 instead; if it is a real file, use kind:path with its filesystem path",
       );
     }
 
