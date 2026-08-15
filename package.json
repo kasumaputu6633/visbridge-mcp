@@ -1,6 +1,6 @@
 {
   "name": "visbridge-mcp",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "author": "kasumabalidps",
   "description": "Token-efficient vision capability layer for MCP clients (describe / OCR / inspect)",
   "license": "Apache-2.0",
