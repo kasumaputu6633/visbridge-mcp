@@ -257,30 +257,24 @@ claude mcp add --transport http visbridge http://127.0.0.1:3000/mcp
 > local `path` image references, and would let anyone who can reach the port use your provider
 > account. If you ever need remote access, front it with an authenticated TLS gateway.
 
-## Discoverability — helping non-vision models find the tool
+## Discoverability — making non-vision models use it reliably
 
-The tool's `description` is the only "advertisement" a model sees in its context, so it is written
-to signal when to use it: *"Analyze an image you cannot view directly…"*. A capable model will
-usually reach for `analyze_image` on its own when it can't see an image.
-
-Weak or small models may instead **announce** that they will use the tool ("I'll use visbridge to
-look at it") without actually calling it. To make the behavior deterministic, add a reminder to the
-driving agent's instructions:
+The tool's `description` is written to signal when to use it, and most models will reach for
+`analyze_image` on their own. But non-vision models have a trained-in reflex to refuse image
+requests ("I can't see images"), and some paste attachments arrive as `clipboard-*.png`
+filenames that invite wrong guesses. To make the behavior deterministic, add the ready-made
+global rules from **[`docs/agents-image-rules.md`](docs/agents-image-rules.md)** to your
+client's instructions:
 
 - **Claude Code, global** → `~/.claude/CLAUDE.md`
 - **Claude Code, per-project** → `CLAUDE.md`
 - **Claude Code, per-agent** → `.claude/agents/<name>.md`
 - **Cursor** → a rule under `.cursor/rules/`
+- **opencode** → `~/.config/opencode/AGENTS.md` (global) or `AGENTS.md` in the project
 
-```markdown
-## Image handling
-When asked to look at, read, describe, or extract text from an image and you have no
-native vision, do not say you cannot see it and do not merely say you will use the
-`visbridge` tool — call `analyze_image` in the same turn and answer from its result.
-Pass the image by `kind` (`path` / `url` / `base64` / `resource`) and choose `mode`:
-`describe`, `ocr`, or `inspect` (with `prompt`). If the image was pasted with no
-path or URL, ask for a path or URL to pass to the tool.
-```
+The rules cover: calling the tool in the same turn (no refusals, no hedged openers), mapping
+pasted data URLs to `kind: "base64"` instead of inventing paths, mode selection, and error
+reporting. They were validated against GLM 5.3 and DeepSeek V4 (text-only) driving opencode.
 
 ## CLI
 
