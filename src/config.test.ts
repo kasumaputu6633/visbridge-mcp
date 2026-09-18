@@ -53,6 +53,14 @@ test("loadConfig rejects an unknown transport", () => {
   );
 });
 
+test("loadConfig supports the offline mock provider without credentials", () => {
+  const config = loadConfig({ VISION_PROVIDER: "mock" });
+  assert.equal(config.provider, "mock");
+  assert.equal(config.baseUrl, "http://localhost/v1");
+  assert.equal(config.apiKey, "mock-key");
+  assert.equal(config.model, "mock-model");
+});
+
 test("loadConfig rejects openai provider with clear error", () => {
   assert.throws(
     () => loadConfig({ ...BASE_ENV, VISION_PROVIDER: "openai" }),
