@@ -67,7 +67,7 @@ the environment from its own config — a `.env` file is optional.
 | `VISION_BASE_URL` | ✅ | — | Base URL of the OpenAI-compatible endpoint (http/https). |
 | `VISION_API_KEY` | ✅ | — | Bearer token sent to the provider. |
 | `VISION_MODEL` | ✅ | — | Vision model id, e.g. `ag/gemini-3.6-flash-medium`. |
-| `VISION_PROVIDER` | — | `openai-compatible` | Adapter: `openai-compatible` (chat completions), `mock` (offline deterministic adapter for tests/demos), or `openai` (Responses API — scaffold only). |
+| `VISION_PROVIDER` | — | `openai-compatible` | Adapter: `openai-compatible` (chat completions) or `mock` (offline deterministic adapter for tests/demos). The `openai` Responses API adapter is not implemented yet. |
 | `VISION_TRANSPORT` | — | `stdio` | Transport: `stdio` (default) or `http` (Streamable HTTP). |
 | `VISION_HTTP_HOST` | — | `127.0.0.1` | Bind address for the HTTP transport. |
 | `VISION_HTTP_PORT` | — | `3000` | Port for the HTTP transport. |
