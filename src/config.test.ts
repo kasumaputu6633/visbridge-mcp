@@ -53,6 +53,13 @@ test("loadConfig rejects an unknown transport", () => {
   );
 });
 
+test("loadConfig rejects unknown provider", () => {
+  assert.throws(
+    () => loadConfig({ ...BASE_ENV, VISION_PROVIDER: "ollama" }),
+    /VISION_PROVIDER must be "openai-compatible" or "mock"/,
+  );
+});
+
 test("loadConfig supports the offline mock provider without credentials", () => {
   const config = loadConfig({ VISION_PROVIDER: "mock" });
   assert.equal(config.provider, "mock");
